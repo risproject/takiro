@@ -1,118 +1,72 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-    Radar, RadarChart, PolarGrid,
-    PolarAngleAxis, PolarRadiusAxis,
-    ResponsiveContainer
+import { 
+    Radar, RadarChart, PolarGrid, 
+    PolarAngleAxis, PolarRadiusAxis, 
+    ResponsiveContainer, Tooltip 
 } from "recharts";
-import dataKartu from "../components/datakartu";
-import { getStatusColor } from "../components/levelLogic";
+import { db } from "../lib/firebase";
+import { ref, onValue } from "firebase/database";
 
 export default function Grafik() {
-    const [width, setWidth] = useState(768);
+    const [sensorData, setSensorData] = useState(null);
 
     useEffect(() => {
-        const handleResize = () => setWidth(window.innerWidth);
-        handleResize();
-        window.addEventListener("resize", handleResize);
-        return () => window.removeEventListener("resize", handleResize);
+        // Mengambil data realtime dari Firebase
+        const sensorRef = ref(db, "/");
+        
+        const unsubscribe = onValue(sensorRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                setSensorData(data);
+            }
+        });
+
+        return () => unsubscribe();
     }, []);
 
-    const renderTick = ({ x, y, index, cx, cy }) => {
-        const d = dataKartu[index];
-        const fontSize = width < 640 ? 10 : 12;
-        const r = width < 640 ? 16 : 24;
-        const maxChars = 8;
-        const lineGap = 2;
+    // Jika data belum masuk, tampilkan data dummy 0 agar tidak error
+    const currentData = sensorData || { suhu: 0, kelembaban: 0, cahaya: 0, ph: 0, suhuTanah: 0 };
 
-        const wrapText = (text) => {
-            const words = text.split(" ");
-            const lines = [];
-            let line = "";
-            words.forEach(w => {
-                if ((line + " " + w).trim().length <= maxChars) line = (line + " " + w).trim();
-                else { if (line) lines.push(line); line = w; }
-            });
-            if (line) lines.push(line);
-            return lines;
-        };
-
-        const lines = wrapText(d.parameter);
-        const angle = Math.atan2(y - cy, x - cx);
-        const dx = Math.cos(angle) * r;
-        const dy = Math.sin(angle) * r;
-
-        return (
-            <text x={x + dx} y={y + dy} textAnchor="middle"
-                style={{ fontSize }}
-                className="fill-gray-800 font-semibold"
-                pointerEvents="none">
-                {lines.map((line, i) => (
-                    <tspan key={i} x={x + dx} dy={i === 0 ? 0 : fontSize + lineGap}>{line}</tspan>
-                ))}
-                <tspan x={x + dx} dy={fontSize + lineGap}>{`${d.nilai}${d.satuan}`}</tspan>
-            </text>
-        );
-    };
-
-    const renderDot = ({ cx, cy, index }) => (
-        <circle
-            key={index}
-            cx={cx}
-            cy={cy}
-            r={5}
-            fill={getStatusColor(dataKartu[index].level)}
-            stroke="#fff"
-            strokeWidth={1} />
-    );
+    // Format data untuk Recharts Radar Chart
+    // Kita memetakan data Firebase ke bentuk sudut-sudut grafik
+    const chartData = [
+        { subject: 'Suhu Udara', A: currentData.suhu || 0, fullMark: 50 },
+        { subject: 'Kelembaban', A: currentData.kelembaban || 0, fullMark: 100 },
+        // Asumsi ada data lain, jika tidak ada di firebase akan 0
+        { subject: 'Cahaya', A: currentData.cahaya || 0, fullMark: 100 }, 
+        { subject: 'Suhu Tanah', A: currentData.suhuTanah || 0, fullMark: 50 },
+        { subject: 'pH Tanah', A: currentData.ph || 0, fullMark: 14 },
+    ];
 
     return (
-        <div className="bg-white shadow-md rounded-2xl p-4 text-center">
-            <h2 className="text-md font-semibold mb-3">Tanamanku</h2>
-            <div className="flex justify-center gap-4 mb-2 text-xs md:text-sm">
-                <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 rounded-full" style={{ background: "#FD9A00" }} /> Waspada
-                </div>
-                <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 rounded-full" style={{ background: "#00BBA8" }} /> Optimal
-                </div>
-                <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 rounded-full" style={{ background: "#FB2C36" }} /> Bahaya
-                </div>
-            </div>
-            <div className="w-full h-64 md:h-96">
+        <div className="bg-white p-4 rounded-xl shadow-md border border-slate-200 flex flex-col items-center justify-center">
+            <h3 className="text-slate-600 font-semibold mb-2">Peta Kesehatan Tanaman</h3>
+            
+            <div className="w-full h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart data={dataKartu} outerRadius={width < 768 ? "60%" : "70%"}>
-                        {/* Grid dengan 4 ring */}
-                        <PolarGrid
-                            radialLines={false}
-                            stroke="rgba(0, 177, 160, 0.8)"
-                        />
-
-                        {/* Sumbu radius level 0-3 */}
-                        <PolarRadiusAxis
-                            domain={[0, 3]}
-                            ticks={[0, 1, 2, 3]}
-                            tick={false}
-                            axisLine={false}
-                        />
-
-                        <PolarAngleAxis
-                            dataKey="parameter"
-                            tick={renderTick}
-                        />
-
+                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={chartData}>
+                        <PolarGrid stroke="#e2e8f0" />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 12 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                         <Radar
-                            dataKey="level"
-                            stroke="#00C1AD"
+                            name="Kondisi Saat Ini"
+                            dataKey="A"
+                            stroke="#0ea5e9"
                             strokeWidth={2}
-                            fill="#00BBA8"
-                            fillOpacity={0.6}
-                            dot={renderDot}
+                            fill="#0ea5e9"
+                            fillOpacity={0.4}
+                        />
+                        <Tooltip 
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                         />
                     </RadarChart>
                 </ResponsiveContainer>
+            </div>
+            
+            <div className="text-xs text-slate-400 mt-2 text-center">
+                Grafik menyesuaikan data realtime dari sensor
             </div>
         </div>
     );

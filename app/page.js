@@ -1,3 +1,4 @@
+// app/page.js
 import Kartu from "../components/kartu";
 import Grafik from "../components/grafik";
 
@@ -9,10 +10,10 @@ export default function Home() {
       {/* Wrapper untuk grid utama */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Grafik />
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4"> 
+          {/* Cukup panggil Kartu, dia akan otomatis looping sesuai sensorConfig */}
           <Kartu />
         </div>
-
       </div>
     </div>
   );

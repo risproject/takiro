@@ -1,218 +1,265 @@
 "use client";
 
-import { useState } from "react";
-import { RiSave3Fill, RiLinkM, RiEyeLine, RiEyeOffLine, RiRobot2Fill, RiUserFill, RiNotification3Fill } from "react-icons/ri";
+import { useState, useEffect } from "react";
+// Pastikan path firebase benar (mundur 2 folder)
+import { db } from "../../lib/firebase"; 
+import { ref, onValue, update } from "firebase/database";
+// PERBAIKAN: Mengganti FaSave menjadi FaFloppyDisk
+import { 
+  FaFloppyDisk, FaEye, FaEyeSlash, FaUser, FaPen 
+} from "react-icons/fa6";
 
 export default function Setelan() {
-  // State untuk menangani nilai input
+  // --- STATE DATA ---
   const [settings, setSettings] = useState({
     deviceId: "ESP32-PLANT-001",
-    authToken: "secret_token_123",
-    minMoisture: 40, // Nilai slider awal
-    duration: 120,
-    interval: 30,
-    notifDry: false,
-    notifTemp: true,
+    authToken: "takiro-secure-token-123",
+    minKelembaban: 40,  // Batas slider (default 40%)
+    durasiSiram: 120,   // Detik
+    jedaSiram: 30,      // Menit
+    alertTanah: false,  // Toggle Notifikasi 1
+    alertSuhu: true     // Toggle Notifikasi 2
   });
 
-  const [showToken, setShowToken] = useState(false);
+  const [showToken, setShowToken] = useState(false); // Untuk tombol mata (hide/show)
+  const [isSaving, setIsSaving] = useState(false);   // Efek loading tombol simpan
 
-  // Handler untuk mengubah state
+  // --- 1. AMBIL DATA DARI FIREBASE SAAT LOAD ---
+  useEffect(() => {
+    const configRef = ref(db, "/config");
+    
+    const unsubscribe = onValue(configRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        setSettings(prev => ({
+          ...prev,
+          ...data 
+        }));
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // --- 2. FUNGSI UPDATE STATE LOKAL ---
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setSettings((prev) => ({
+    setSettings(prev => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: type === "checkbox" ? checked : value
     }));
   };
 
-  // Handler khusus untuk Toggle Switch
-  const toggleSwitch = (key) => {
-    setSettings((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+  // --- 3. FUNGSI SIMPAN KE FIREBASE (ACTION) ---
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const configRef = ref(db, "/config");
+      await update(configRef, {
+        deviceId: settings.deviceId,
+        authToken: settings.authToken,
+        minKelembaban: Number(settings.minKelembaban),
+        durasiSiram: Number(settings.durasiSiram),
+        jedaSiram: Number(settings.jedaSiram),
+        alertTanah: settings.alertTanah,
+        alertSuhu: settings.alertSuhu
+      });
+      
+      setTimeout(() => {
+        setIsSaving(false);
+        alert("Pengaturan Berhasil Disimpan ke Perangkat IoT! ✅");
+      }, 800);
+      
+    } catch (error) {
+      console.error("Gagal simpan:", error);
+      setIsSaving(false);
+      alert("Gagal menyimpan pengaturan.");
+    }
   };
 
   return (
-    <div className="p-4 md:p-8 text-slate-700 h-full">
+    <div className="p-6 text-slate-800 min-h-screen pb-20 bg-slate-50/50">
       
-      {/* Header Section */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Pengaturan Aplikasi</h1>
-          <p className="text-sm text-slate-500">Konfigurasi Alat IoT dan Parameter Tanaman</p>
+          <p className="text-slate-500 text-sm mt-1">Konfigurasi Alat IoT dan Parameter Tanaman</p>
         </div>
-        <button className="bg-[#2A9D8F] hover:bg-teal-700 text-white px-6 py-2 rounded-lg shadow-md transition flex items-center gap-2 font-medium">
-          <RiSave3Fill size={18} /> Simpan
+        
+        {/* TOMBOL SIMPAN (Pojok Kanan Atas) */}
+        <button 
+          onClick={handleSave}
+          disabled={isSaving}
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-white font-medium shadow-md transition-all
+            ${isSaving ? "bg-emerald-400 cursor-wait" : "bg-emerald-600 hover:bg-emerald-700 active:scale-95"}`}
+        >
+          {/* PERBAIKAN: Menggunakan FaFloppyDisk disini */}
+          <FaFloppyDisk /> {isSaving ? "Menyimpan..." : "Simpan"}
         </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Kolom Kiri: Konfigurasi Teknis */}
-        <div className="lg:col-span-2 space-y-8">
-          
-          {/* Box 1: Koneksi Perangkat */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 pb-2 border-b border-slate-100">
-              <RiLinkM className="text-[#2A9D8F]" size={20} /> Koneksi Perangkat
-            </h3>
+        {/* --- KOLOM KIRI (FORM UTAMA) --- */}
+        <div className="lg:col-span-2 space-y-6">
+
+          {/* 1. KARTU KONEKSI PERANGKAT */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <h2 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+              🔗 Koneksi Perangkat
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
               {/* Device ID */}
               <div>
-                <label className="block text-sm font-medium text-slate-600 mb-2">Device ID</label>
+                <label className="block text-xs font-semibold text-slate-500 mb-2">Device ID</label>
                 <input 
                   type="text" 
                   name="deviceId"
-                  value={settings.deviceId} 
-                  readOnly
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-500 cursor-not-allowed focus:outline-none" 
+                  value={settings.deviceId}
+                  onChange={handleChange}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
+                  placeholder="Contoh: ESP32-PLANT-001"
                 />
               </div>
 
-              {/* Auth Token */}
+              {/* Auth Token (Password Style) */}
               <div>
-                <label className="block text-sm font-medium text-slate-600 mb-2">Auth Token</label>
-                <div className="flex gap-2">
+                <label className="block text-xs font-semibold text-slate-500 mb-2">Auth Token</label>
+                <div className="relative">
                   <input 
                     type={showToken ? "text" : "password"} 
                     name="authToken"
                     value={settings.authToken}
                     onChange={handleChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#2A9D8F] focus:border-transparent outline-none transition-all"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition pr-10"
                   />
                   <button 
                     onClick={() => setShowToken(!showToken)}
-                    className="bg-slate-100 hover:bg-slate-200 px-3 rounded-lg text-slate-600 transition-colors"
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition"
                   >
-                    {showToken ? <RiEyeOffLine /> : <RiEyeLine />}
+                    {showToken ? <FaEyeSlash /> : <FaEye />}
                   </button>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Box 2: Parameter Otomatisasi */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 pb-2 border-b border-slate-100">
-              <RiRobot2Fill className="text-orange-500" size={20} /> Parameter Otomatisasi
-            </h3>
-            <div className="space-y-6">
-              
-              {/* Slider Kelembaban */}
-              <div>
-                <div className="flex justify-between mb-2">
-                  <label className="text-sm font-medium text-slate-700">Batas Minimal Kelembaban</label>
-                  <span className="text-sm font-bold text-[#2A9D8F]">{settings.minMoisture}%</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="100" 
-                  name="minMoisture"
-                  value={settings.minMoisture}
-                  onChange={handleChange}
-                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#2A9D8F]" 
-                />
-                <div className="flex justify-between text-xs text-slate-400 mt-1">
-                  <span>0% (Kering)</span>
-                  <span>Jika &lt; {settings.minMoisture}%, Pompa ON</span>
-                  <span>100% (Basah)</span>
-                </div>
-              </div>
+          {/* 2. KARTU PARAMETER OTOMATISASI */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <h2 className="text-sm font-bold text-slate-700 mb-6 flex items-center gap-2">
+              🤖 Parameter Otomatisasi
+            </h2>
 
-              {/* Durasi & Jeda */}
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-2">Durasi Siram (Detik)</label>
-                  <input 
-                    type="number" 
-                    name="duration"
-                    value={settings.duration}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#2A9D8F] focus:border-transparent outline-none transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-2">Jeda Siram (Menit)</label>
-                  <input 
-                    type="number" 
-                    name="interval"
-                    value={settings.interval}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#2A9D8F] focus:border-transparent outline-none transition-all"
-                  />
-                </div>
+            {/* Slider Kelembaban */}
+            <div className="mb-8">
+              <div className="flex justify-between mb-2">
+                <label className="text-sm font-medium text-slate-700">Batas Minimal Kelembaban</label>
+                <span className="text-sm font-bold text-emerald-600">{settings.minKelembaban}%</span>
+              </div>
+              
+              <input 
+                type="range" 
+                name="minKelembaban"
+                min="0" max="100" 
+                value={settings.minKelembaban}
+                onChange={handleChange}
+                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+              />
+              
+              <div className="flex justify-between text-xs text-slate-400 mt-2">
+                <span>0% (Kering)</span>
+                <span>Jika &lt; {settings.minKelembaban}%, Pompa ON</span>
+                <span>100% (Basah)</span>
+              </div>
+            </div>
+
+            {/* Input Durasi & Jeda */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Durasi Siram (Detik)</label>
+                <input 
+                  type="number" 
+                  name="durasiSiram"
+                  value={settings.durasiSiram}
+                  onChange={handleChange}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Jeda Siram (Menit)</label>
+                <input 
+                  type="number" 
+                  name="jedaSiram"
+                  value={settings.jedaSiram}
+                  onChange={handleChange}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition"
+                />
               </div>
             </div>
           </div>
+
         </div>
 
-        {/* Kolom Kanan: Profil & Notif */}
-        <div className="space-y-8">
-          
-          {/* Profil Card */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 text-center">
-            <div className="w-24 h-24 mx-auto mb-4 bg-slate-200 rounded-full flex items-center justify-center text-3xl text-slate-400">
-              <RiUserFill />
+        {/* --- KOLOM KANAN (PROFIL & NOTIFIKASI) --- */}
+        <div className="lg:col-span-1 space-y-6">
+
+          {/* 3. KARTU PROFIL USER */}
+          <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center text-center">
+            <div className="w-24 h-24 bg-slate-200 rounded-full flex items-center justify-center text-slate-400 mb-4 shadow-inner">
+               <FaUser size={40} />
             </div>
             <h3 className="font-bold text-lg text-slate-800">Petani Cabai 01</h3>
-            <p className="text-sm text-slate-500 mb-4">petani@takiro.com</p>
-            <button className="w-full border border-slate-300 text-slate-600 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 transition">Edit Profil</button>
+            <p className="text-sm text-slate-500 mb-6">petani@takiro.com</p>
+            
+            <button className="w-full py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition flex justify-center items-center gap-2">
+               Edit Profil
+            </button>
           </div>
 
-          {/* Notifikasi */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-            <h3 className="font-bold text-slate-800 mb-4 text-sm uppercase tracking-wider flex items-center gap-2">
-                 Notifikasi
-            </h3>
-            <div className="space-y-5">
-              
-              {/* Toggle 1 */}
-              <div className="flex items-center justify-between">
+          {/* 4. KARTU NOTIFIKASI */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-6">NOTIFIKASI</h2>
+            
+            {/* Toggle 1 */}
+            <div className="flex justify-between items-center mb-6">
                 <div>
-                  <p className="text-sm font-medium text-slate-700">Alert Tanah Kering</p>
-                  <p className="text-xs text-slate-400">Saat pompa menyala.</p>
+                    <div className="text-sm font-semibold text-slate-700">Alert Tanah Kering</div>
+                    <div className="text-xs text-slate-400">Saat pompa menyala.</div>
                 </div>
-                <ToggleSwitch 
-                    isOn={settings.notifDry} 
-                    onToggle={() => toggleSwitch('notifDry')} 
-                />
-              </div>
-
-              {/* Toggle 2 */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-700">Alert Suhu</p>
-                  <p className="text-xs text-slate-400">Jika suhu &gt; 35°C.</p>
-                </div>
-                <ToggleSwitch 
-                    isOn={settings.notifTemp} 
-                    onToggle={() => toggleSwitch('notifTemp')} 
-                />
-              </div>
-
+                <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                        type="checkbox" 
+                        name="alertTanah"
+                        checked={settings.alertTanah} 
+                        onChange={handleChange}
+                        className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
             </div>
-          </div>
-        </div>
 
+            {/* Toggle 2 */}
+            <div className="flex justify-between items-center">
+                <div>
+                    <div className="text-sm font-semibold text-slate-700">Alert Suhu</div>
+                    <div className="text-xs text-slate-400">Jika suhu &gt; 35°C.</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                        type="checkbox" 
+                        name="alertSuhu"
+                        checked={settings.alertSuhu} 
+                        onChange={handleChange}
+                        className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+            </div>
+
+          </div>
+
+        </div>
       </div>
     </div>
   );
-}
-
-// Komponen Kecil untuk Toggle Switch (Re-usable)
-function ToggleSwitch({ isOn, onToggle }) {
-    return (
-        <button 
-            onClick={onToggle}
-            className={`relative w-11 h-6 rounded-full transition-colors duration-300 ease-in-out focus:outline-none ${isOn ? 'bg-[#2A9D8F]' : 'bg-slate-300'}`}
-        >
-            <span 
-                className={`absolute top-[2px] left-[2px] bg-white w-5 h-5 rounded-full shadow-sm transition-transform duration-300 ease-in-out ${isOn ? 'translate-x-5' : 'translate-x-0'}`}
-            />
-        </button>
-    );
 }
